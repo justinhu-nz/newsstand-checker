@@ -1,0 +1,54 @@
+name: Check NZ front pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      edition_date:
+        description: "Optional NZ edition date (YYYY-MM-DD); blank selects the upcoming edition"
+        required: false
+        type: string
+
+  schedule:
+    # Half-hourly from 6:00 pm through 2:00 am in New Zealand.
+    # Using Pacific/Auckland means GitHub handles NZST/NZDT automatically.
+    - cron: "0,30 18-23 * * *"
+      timezone: "Pacific/Auckland"
+    - cron: "0,30 0-1 * * *"
+      timezone: "Pacific/Auckland"
+    - cron: "0 2 * * *"
+      timezone: "Pacific/Auckland"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nz-front-page-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Check front pages
+        env:
+          EDITION_DATE: ${{ inputs.edition_date }}
+        run: |
+          args=()
+          if [[ -n "$EDITION_DATE" ]]; then
+            args+=(--edition-date "$EDITION_DATE")
+          fi
+          python3 check_front_pages.py "${args[@]}"
+
+      - name: Upload observation data
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-page-check-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/
+          if-no-files-found: error
+          retention-days: 90
+
